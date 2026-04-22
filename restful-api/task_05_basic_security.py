@@ -1,61 +1,57 @@
-#!/usr/bin/python3
-"""Flask API with Basic Auth + JWT + Role-based access."""
-
+#!/usr/bin/env python3
 from flask import Flask, jsonify, request
 from flask_httpauth import HTTPBasicAuth
 from flask_jwt_extended import (
-    JWTManager,
-    create_access_token,
-    jwt_required,
-    get_jwt
+    JWTManager, create_access_token,
+    jwt_required, get_jwt_identity
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 
-# Secret key for JWT
+# JWT config
 app.config["JWT_SECRET_KEY"] = "super-secret-key"
+
+auth = HTTPBasicAuth()
 jwt = JWTManager(app)
 
-# Basic Auth
-auth = HTTPBasicAuth()
-
-# Users (username -> data)
+# USERS (RAM-də)
 users = {
-    "admin": {
-        "password": generate_password_hash("admin123"),
-        "role": "admin"
-    },
     "user1": {
-        "password": generate_password_hash("user123"),
+        "username": "user1",
+        "password": generate_password_hash("password"),
         "role": "user"
+    },
+    "admin1": {
+        "username": "admin1",
+        "password": generate_password_hash("password"),
+        "role": "admin"
     }
 }
 
-# -------------------------
-# BASIC AUTH
-# -------------------------
+# ---------------- BASIC AUTH ----------------
 
 @auth.verify_password
-def verify(username, password):
-    if username in users:
-        return check_password_hash(users[username]["password"], password)
-    return False
+def verify_password(username, password):
+    if username in users and check_password_hash(users[username]["password"], password):
+        return username
+    return None
 
 
 @app.route("/basic-protected")
 @auth.login_required
 def basic_protected():
-    return jsonify({"message": "Basic Auth Access Granted"})
+    return "Basic Auth: Access Granted"
 
 
-# -------------------------
-# JWT LOGIN
-# -------------------------
+# ---------------- LOGIN (JWT) ----------------
 
 @app.route("/login", methods=["POST"])
 def login():
     data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "Invalid JSON"}), 400
 
     username = data.get("username")
     password = data.get("password")
@@ -63,58 +59,39 @@ def login():
     if username not in users:
         return jsonify({"error": "Invalid credentials"}), 401
 
-    user = users[username]
-
-    if not check_password_hash(user["password"], password):
+    if not check_password_hash(users[username]["password"], password):
         return jsonify({"error": "Invalid credentials"}), 401
 
-    token = create_access_token(
-        identity=username,
-        additional_claims={"role": user["role"]}
-    )
+    token = create_access_token(identity={
+        "username": username,
+        "role": users[username]["role"]
+    })
 
-    return jsonify({"token": token})
+    return jsonify({"access_token": token})
 
 
-# -------------------------
-# JWT PROTECTED ROUTE
-# -------------------------
+# ---------------- JWT PROTECTED ----------------
 
-@app.route("/protected")
+@app.route("/jwt-protected")
 @jwt_required()
-def protected():
-    return jsonify({"message": "JWT Access Granted"})
+def jwt_protected():
+    return "JWT Auth: Access Granted"
 
 
-# -------------------------
-# ROLE BASED ACCESS
-# -------------------------
+# ---------------- ADMIN ONLY ----------------
 
-@app.route("/admin")
+@app.route("/admin-only")
 @jwt_required()
 def admin_only():
-    claims = get_jwt()
+    user = get_jwt_identity()
 
-    if claims.get("role") != "admin":
-        return jsonify({"error": "Admins only"}), 403
+    if user["role"] != "admin":
+        return jsonify({"error": "Admin access required"}), 403
 
-    return jsonify({"message": "Welcome Admin!"})
-
-
-@app.route("/user")
-@jwt_required()
-def user_route():
-    claims = get_jwt()
-
-    if claims.get("role") not in ["user", "admin"]:
-        return jsonify({"error": "Access denied"}), 403
-
-    return jsonify({"message": "User access granted"})
+    return "Admin Access: Granted"
 
 
-# -------------------------
-# RUN SERVER
-# -------------------------
+# ---------------- RUN ----------------
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000)
