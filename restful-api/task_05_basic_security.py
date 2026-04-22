@@ -15,7 +15,7 @@ app.config["JWT_SECRET_KEY"] = "super-secret-key"
 auth = HTTPBasicAuth()
 jwt = JWTManager(app)
 
-# USERS (RAM-də)
+# ---------------- USERS ----------------
 users = {
     "user1": {
         "username": "user1",
@@ -44,7 +44,34 @@ def basic_protected():
     return "Basic Auth: Access Granted"
 
 
-# ---------------- LOGIN (JWT) ----------------
+# ---------------- JWT ERROR HANDLERS (IMPORTANT FIX) ----------------
+
+@jwt.unauthorized_loader
+def missing_token(err):
+    return jsonify({"error": "Missing or invalid token"}), 401
+
+
+@jwt.invalid_token_loader
+def invalid_token(err):
+    return jsonify({"error": "Invalid token"}), 401
+
+
+@jwt.expired_token_loader
+def expired_token(jwt_header, jwt_payload):
+    return jsonify({"error": "Token has expired"}), 401
+
+
+@jwt.needs_fresh_token_loader
+def fresh_token_required(err):
+    return jsonify({"error": "Fresh token required"}), 401
+
+
+@jwt.revoked_token_loader
+def revoked_token(jwt_header, jwt_payload):
+    return jsonify({"error": "Token has been revoked"}), 401
+
+
+# ---------------- LOGIN ----------------
 
 @app.route("/login", methods=["POST"])
 def login():
